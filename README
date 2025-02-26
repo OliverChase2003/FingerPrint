@@ -1,0 +1,15 @@
+## 基于esp32的指纹识别打卡系统
+### 环境
+平台：esp32 arduino
+1. vscode + platformIO
+2. Adafruit Fingerprint Sensor Library
+### 业务逻辑
+1. 指纹录入
+
+2. 指纹识别
+
+3. 指纹删除
+
+4. 模式选择
+
+5. 打卡记录存储
