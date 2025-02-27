@@ -3,6 +3,7 @@
 #include <SD.h>
 #include <Adafruit_Fingerprint.h>
 #include <Adafruit_SSD1306.h>
+#include <Keypad.h>
 
 // macros
 // ssd1306 defs
@@ -13,6 +14,9 @@
 #define CUSTOM_MISO 19
 #define CUSTOM_SCK  18
 #define CUSTOM_SS   5
+// keyboard
+#define KEYPAD_ROW  4
+#define KEYPAD_COL  4
 
 // global var
 // fingerprint
@@ -21,6 +25,14 @@ Adafruit_Fingerprint finger(&Serial1);
 const int spi_chipSelect = 5;
 // ssd1306
 Adafruit_SSD1306 display(SSD1306_WIDTH, SSD1306_HEIGHT, &Wire, -1);
+// keypad
+//char keypad[KEYPAD_ROW][KEYPAD_COL] = {
+//  {'7', '8', '9', ''},
+//  {'4', '5', '6', ''},
+//  {'1', '2', '3', ''},
+//  {'', '0', '', ''},
+//};
+
 // program's vars
 int num = 0;
 
@@ -34,7 +46,7 @@ void setup() {
   // debug uart port init
   Serial.begin(115200);   // serial for debug
   // fingerprint init
-  Serial1.begin(57600);   // serial for AS608
+  Serial2.begin(57600);   // serial for AS608
   finger.begin(57600);
   debug_print("fingerprint init success!");
   // spi sdcard module init

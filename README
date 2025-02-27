@@ -3,6 +3,11 @@
 平台：esp32 arduino
 1. vscode + platformIO
 2. Adafruit Fingerprint Sensor Library
+### 接线
+debug: usb-c
+as608: uart2(tx-17, rx-16)
+sdcard: spi2(mosi-12, miso-13, sck-14, cs-15(可选))/spi3(23, 19, 18, 5(可选))
+ssd1306: (sda-21, sck-22)
 ### 业务逻辑
 1. 指纹录入
 
