@@ -1,7 +1,10 @@
 #include <Arduino.h>
 #include <SPI.h>
+#include <FS.h>
 #include <SD.h>
 #include <Adafruit_Fingerprint.h>
+#include <Wire.h>
+#include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 #include <Keypad.h>
 
@@ -9,18 +12,13 @@
 // ssd1306 defs
 #define SSD1306_WIDTH   128   // ssd1306 oled pixel width
 #define SSD1306_HEIGHT  64    // ssd1306 oled pixel height
-// spi0 defs
-#define CUSTOM_MOSI 23
-#define CUSTOM_MISO 19
-#define CUSTOM_SCK  18
-#define CUSTOM_SS   5
 // keyboard
 #define KEYPAD_ROW  4
 #define KEYPAD_COL  4
 
 // global var
 // fingerprint
-Adafruit_Fingerprint finger(&Serial1);
+Adafruit_Fingerprint finger(&Serial2);
 // sdcard
 const int spi_chipSelect = 5;
 // ssd1306
@@ -42,30 +40,34 @@ void panic(const char* s);
 
 // init func
 void setup() {
-  // put your setup code here, to run once:
   // debug uart port init
   Serial.begin(115200);   // serial for debug
+  while(!Serial) {         // wait debug serial
+    yield();
+  }
+
   // fingerprint init
   Serial2.begin(57600);   // serial for AS608
   finger.begin(57600);
-  debug_print("fingerprint init success!");
-  // spi sdcard module init
-  SPI.begin(CUSTOM_SCK, CUSTOM_MISO, CUSTOM_MOSI, CUSTOM_SS);
-  if(SD.begin()){   // dont need to specify the spi bus, use spi0 as default
-    debug_print("sdcard init success!");
-  }else{
-    panic("sdcard init failed!");
+  delay(1000);
+  if(!Serial2) {
+    panic("fingerprint init failed!");
   }
+  debug_print("fingerprint init success!");
+
+  // spi sdcard module init
+  //if(!SD.begin()) {
+  //  panic("sdcard init failed!");
+  //}
+  debug_print("sdcard init success!");
+
   // ssd1306 screen init
-  if(display.begin()){
-    debug_print("ssd1306 init success!");
-  }else{
+  if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)){
     panic("ssd1306 init failed!");
   }
 }
 
 void loop() {
-  // put your main code here, to run repeatedly:
  
 }
 

@@ -8,6 +8,19 @@ debug: usb-c
 as608: uart2(tx-17, rx-16)
 sdcard: spi2(mosi-12, miso-13, sck-14, cs-15(可选))/spi3(23, 19, 18, 5(可选))
 ssd1306: (sda-21, sck-22)
+### 库的基本使用
+1. SSD1306
+```CPP
+display.clearDisplay();  // 清空屏幕
+display.setTextSize(2);  // 字体大小
+display.setTextColor(WHITE);  // 字体颜色
+display.setCursor(0, 0);  // 光标位置
+display.println("Hello, SSD1306!");
+display.display();  // 更新显示
+```
+2. SD
+3. Fingerprint
+
 ### 业务逻辑
 1. 指纹录入
 
