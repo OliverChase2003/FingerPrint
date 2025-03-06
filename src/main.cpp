@@ -1,9 +1,12 @@
 #include <Arduino.h>
 #include <HardwareSerial.h>
 #include <SPI.h>
+#include <FS.h>
 #include <SD.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_Fingerprint.h>
+#include <Wire.h>
+#include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 #include <Keypad.h>
 
@@ -19,6 +22,7 @@
 
 // global var
 // fingerprint
+Adafruit_Fingerprint finger(&Serial2);
 Adafruit_Fingerprint finger(&Serial2);
 // sdcard
 const int spi_chipSelect = 5;
@@ -41,9 +45,12 @@ void panic(const char* s);
 
 // init func
 void setup() {
-  // put your setup code here, to run once:
   // debug uart port init
   Serial.begin(115200);   // serial for debug
+  while(!Serial) {         // wait debug serial
+    yield();
+  }
+
   // fingerprint init
   Serial2.begin(57600);   // serial for AS608
   finger.begin(57600);
@@ -51,6 +58,7 @@ void setup() {
     panic("fingerprint init failed");
   }
   debug_print("fingerprint init success!");
+
   // spi sdcard module init
   if(SD.begin(SDCARD_SS)){   // dont need to specify the spi bus, use spi0 as default
     debug_print("sdcard init success!");
@@ -73,7 +81,6 @@ void setup() {
 }
 
 void loop() {
-  // put your main code here, to run repeatedly:
  
 }
 
