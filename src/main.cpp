@@ -1,6 +1,8 @@
 #include <Arduino.h>
+#include <HardwareSerial.h>
 #include <SPI.h>
 #include <SD.h>
+#include <Adafruit_GFX.h>
 #include <Adafruit_Fingerprint.h>
 #include <Adafruit_SSD1306.h>
 #include <Keypad.h>
@@ -9,18 +11,15 @@
 // ssd1306 defs
 #define SSD1306_WIDTH   128   // ssd1306 oled pixel width
 #define SSD1306_HEIGHT  64    // ssd1306 oled pixel height
-// spi0 defs
-#define CUSTOM_MOSI 23
-#define CUSTOM_MISO 19
-#define CUSTOM_SCK  18
-#define CUSTOM_SS   5
+// spi-sdcard defs
+#define SDCARD_SS   5
 // keyboard
 #define KEYPAD_ROW  4
 #define KEYPAD_COL  4
 
 // global var
 // fingerprint
-Adafruit_Fingerprint finger(&Serial1);
+Adafruit_Fingerprint finger(&Serial2);
 // sdcard
 const int spi_chipSelect = 5;
 // ssd1306
@@ -48,17 +47,26 @@ void setup() {
   // fingerprint init
   Serial2.begin(57600);   // serial for AS608
   finger.begin(57600);
+  if(!finger.verifyPassword()){
+    panic("fingerprint init failed");
+  }
   debug_print("fingerprint init success!");
   // spi sdcard module init
-  SPI.begin(CUSTOM_SCK, CUSTOM_MISO, CUSTOM_MOSI, CUSTOM_SS);
-  if(SD.begin()){   // dont need to specify the spi bus, use spi0 as default
+  if(SD.begin(SDCARD_SS)){   // dont need to specify the spi bus, use spi0 as default
     debug_print("sdcard init success!");
   }else{
-    panic("sdcard init failed!");
+    //panic("sdcard init failed!");
   }
   // ssd1306 screen init
-  if(display.begin()){
+  if(display.begin(SSD1306_SWITCHCAPVCC, 0x3C)){
+    delay(2000);
     debug_print("ssd1306 init success!");
+    display.clearDisplay();
+    display.setTextSize(1);
+    display.setTextColor(SSD1306_WHITE);
+    display.setCursor(0, 0);
+    display.println("init success");
+    display.display();
   }else{
     panic("ssd1306 init failed!");
   }
