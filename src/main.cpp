@@ -23,7 +23,6 @@
 // global var
 // fingerprint
 Adafruit_Fingerprint finger(&Serial2);
-Adafruit_Fingerprint finger(&Serial2);
 // sdcard
 const int spi_chipSelect = 5;
 // ssd1306
@@ -52,28 +51,30 @@ void setup() {
   }
 
   // fingerprint init
-  Serial2.begin(57600);   // serial for AS608
-  finger.begin(57600);
-  if(!finger.verifyPassword()){
+  Serial2.begin(57600, SERIAL_8N1, 16, 17);   // serial for AS608
+  if(finger.verifyPassword()){
+    debug_print("fingerprint init success!");
+  }else{
     panic("fingerprint init failed");
   }
-  debug_print("fingerprint init success!");
 
   // spi sdcard module init
-  if(SD.begin(SDCARD_SS)){   // dont need to specify the spi bus, use spi0 as default
+  if(SD.begin()){   // dont need to specify the spi bus, use spi0 as default
     debug_print("sdcard init success!");
   }else{
-    //panic("sdcard init failed!");
+    panic("sdcard init failed!");
   }
   // ssd1306 screen init
   if(display.begin(SSD1306_SWITCHCAPVCC, 0x3C)){
-    delay(2000);
     debug_print("ssd1306 init success!");
     display.clearDisplay();
-    display.setTextSize(1);
+    display.setTextSize(2);
     display.setTextColor(SSD1306_WHITE);
     display.setCursor(0, 0);
     display.println("init success");
+    display.setTextColor(SSD1306_WHITE);
+    display.println("hello");
+    display.println("hello");
     display.display();
   }else{
     panic("ssd1306 init failed!");
