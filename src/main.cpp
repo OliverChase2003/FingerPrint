@@ -8,13 +8,18 @@
 #include <Keypad.h>
 #include <string.h>
 #include <stdlib.h>
+#include <WiFi.h>
 
 // macros
+// wifi
+#define WIFI_ID "103"
+#define WIFI_PWD "HelloWorld\\0"
 // ssd1306 defs
 #define SSD1306_WIDTH 128 // ssd1306 oled pixel width
 #define SSD1306_HEIGHT 64 // ssd1306 oled pixel height
-// spi-sdcard defs
-#define SDCARD_SS 5
+// filenames
+#define CHECKINFILE "/check-in.txt"
+#define BITMAPFILE "/bitmap.txt"
 // keyboard
 #define KEYPAD_ROW 4
 #define KEYPAD_COL 4
@@ -42,7 +47,7 @@ void debug_print(const char *fmt, ...);
 void panic(const char *s);
 void ssd1306_print(Adafruit_SSD1306 display, int y, int x, const char *fmt, ...);
 // bitmaps
-int create_bitmap(const char *file);
+void create_bitmap(const char *file);
 int read_bitmap(const char *file, char *bitmap);
 int write_bitmap(const char *file, char *bitmap);
 // log
@@ -75,6 +80,12 @@ void setup()
     panic("ssd1306 init failed!");
   }
 
+  // wifi init
+  WiFi.mode(WIFI_AP_STA);
+  WiFi.begin(WIFI_ID, WIFI_PWD);
+  while(WiFi.status() != WL_CONNECTED) delay(500);
+  debug_print("STA Mode IP: %s", WiFi.localIP());
+
   // fingerprint init
   Serial2.begin(57600, SERIAL_8N1, 16, 17); // serial for AS608
   if (finger.verifyPassword())
@@ -96,18 +107,15 @@ void setup()
     panic("sdcard init failed!");
   }
 
-  // create punch list and bitmap
-  if (!SD.exists("/punch_list.txt"))
+  // create checkin file and bitmap
+  if (!SD.exists(CHECKINFILE))
   {
-    File file = SD.open("/punch_list.txt", FILE_WRITE);
+    File file = SD.open(CHECKINFILE, FILE_WRITE);
     file.close();
   }
-  if (!SD.exists("/bitmap.txt"))
+  if (!SD.exists(BITMAPFILE))
   {
-    File file = SD.open("/bitmap.txt", FILE_WRITE);
-    char buffer[128];
-    memset(buffer, '0', 128);
-    file.println(buffer);
+    create_bitmap(BITMAPFILE);
   }
 
   ssd1306_print(display, 0, 0, "All hardware init success");
@@ -115,16 +123,7 @@ void setup()
 
 void loop()
 {
-  int p = finger.getImage();
-  if (p == FINGERPRINT_OK)
-  {
-    Serial.println("got image");
-  }
-  else
-  {
-    Serial.println("hello");
-  }
-  delay(1000);
+  while(1);
 }
 
 /**
@@ -224,6 +223,36 @@ int enroll(Adafruit_Fingerprint &finger, char *bitmap_file) {
   }
 
   return 0;
+}
+
+/**
+ * @brief get the real time and write check-in log
+ * 
+ * @param number
+ * @param file 
+ */
+void write_log(int number, const char *file) {
+  File f = SD.open(file, FILE_WRITE);
+  char message[64];
+  
+  f.println(message);
+  f.close();
+}
+
+/**
+ * @brief Create a bitmap
+ * 
+ * @param file 
+ */
+void create_bitmap(const char *file) {
+  File f = SD.open(file, FILE_WRITE);
+  char empty_bitmap[129];
+  for(int i = 0; i < 128; i++){
+    empty_bitmap[i] = '0';
+  }
+  empty_bitmap[128] = '\0';
+  f.println(empty_bitmap);
+  f.close();
 }
 
 /**
