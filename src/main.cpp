@@ -53,9 +53,9 @@ int write_bitmap(const char *file, char *bitmap);
 // log
 void write_log();
 // fingerprints
-int enroll(Adafruit_Fingerprint &finger);
-int finger_delete(Adafruit_Fingerprint &finger, int number);
-int check(Adafruit_Fingerprint &finger, int number);
+int finger_enroll(Adafruit_Fingerprint &finger, const char *bitmap_file);
+int finger_delete(Adafruit_Fingerprint &finger, const char *bitmap_file, int number);
+int finger_check(Adafruit_Fingerprint &finger, const char *bitmap_file, int number);
 
 /**
  * @brief init function
@@ -132,7 +132,7 @@ void loop()
  * @param Adafruit_Fingerprint finger: specify which finger module choosed
  * @return int: success for 0, fail for -1
  */
-int enroll(Adafruit_Fingerprint &finger, char *bitmap_file) {
+int enroll(Adafruit_Fingerprint &finger, const char *bitmap_file) {
   char bitmap[128];  // a bitmap for fingerprint
 
   for (int i = 1; i < 3; i++)
@@ -222,6 +222,49 @@ int enroll(Adafruit_Fingerprint &finger, char *bitmap_file) {
     return p;
   }
 
+  return 0;
+}
+
+/**
+ * @brief 
+ * 
+ * @param finger 
+ * @param bitmap_file 
+ * @param number 
+ * @return int 
+ */
+int finger_delete(Adafruit_Fingerprint &finger, const char *bitmap_file, int number)
+{
+  File f = SD.open(bitmap_file, FILE_WRITE);
+  char bitmap[129];
+  read_bitmap(bitmap_file, bitmap); 
+  if(bitmap[number] == '0') {
+    debug_print("finger_delete: finger is not registered");
+    return -1;
+  } else {
+    // check if the finger mapped
+    debug_print("please put your finger on ther sensor");
+    ssd1306_print(display, 0, 0, "put your finger on sensor");
+
+  }
+  f.close();
+  return 0;
+}
+
+/**
+ * @brief 
+ * 
+ * @param finger 
+ * @param bitmap_file 
+ * @param number 
+ * @return int 
+ */
+int finger_check(Adafruit_Fingerprint &finger, const char *bitmap_file) {
+  File f = SD.open(bitmap_file, FILE_READ);
+  // if can read finger, return 1
+
+  f.close();
+  // else return 0;
   return 0;
 }
 
