@@ -55,7 +55,7 @@ void write_log();
 // fingerprints
 int finger_enroll(Adafruit_Fingerprint &finger, const char *bitmap_file);
 int finger_delete(Adafruit_Fingerprint &finger, const char *bitmap_file, int number);
-int finger_check(Adafruit_Fingerprint &finger, const char *bitmap_file, int number);
+int finger_search(Adafruit_Fingerprint &finger, const char *bitmap_file);
 
 /**
  * @brief init function
@@ -116,6 +116,7 @@ void setup()
   if (!SD.exists(BITMAPFILE))
   {
     create_bitmap(BITMAPFILE);
+    finger.emptyDatabase();
   }
 
   ssd1306_print(display, 0, 0, "All hardware init success");
@@ -245,7 +246,10 @@ int finger_delete(Adafruit_Fingerprint &finger, const char *bitmap_file, int num
     // check if the finger mapped
     debug_print("please put your finger on ther sensor");
     ssd1306_print(display, 0, 0, "put your finger on sensor");
-
+    int p = finger.getImage();
+    if(number == finger_search(finger, bitmap_file)) {
+      finger.deleteModel(number);
+    }
   }
   f.close();
   return 0;
@@ -259,13 +263,30 @@ int finger_delete(Adafruit_Fingerprint &finger, const char *bitmap_file, int num
  * @param number 
  * @return int 
  */
-int finger_check(Adafruit_Fingerprint &finger, const char *bitmap_file) {
+int finger_search(Adafruit_Fingerprint &finger, const char *bitmap_file) {
   File f = SD.open(bitmap_file, FILE_READ);
-  // if can read finger, return 1
 
-  f.close();
+  // if finger can be searched, return number
+  int p = finger.getImage();
+  if (p != FINGERPRINT_OK) {
+    if (p == FINGERPRINT_NOFINGER) {
+      Serial.println("未检测到手指！");
+    } else {
+      Serial.println("图像获取失败，错误代码: 0x" + String(p, HEX));
+    }
+    return 128;
+  }
+
+  p = finger.image2Tz();
+  if (p != FINGERPRINT_OK) {
+    Serial.println("特征生成失败！");
+    return 128;
+  }
+
+  f.close(); 
+  if(finger.confidence > 50) return finger.fingerID;
   // else return 0;
-  return 0;
+  return 128;
 }
 
 /**
@@ -276,8 +297,7 @@ int finger_check(Adafruit_Fingerprint &finger, const char *bitmap_file) {
  */
 void write_log(int number, const char *file) {
   File f = SD.open(file, FILE_WRITE);
-  char message[64];
-  
+  String message = "Time:" + String(millis()) + ", Number" + String(number); 
   f.println(message);
   f.close();
 }
