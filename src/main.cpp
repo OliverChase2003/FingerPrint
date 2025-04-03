@@ -11,6 +11,8 @@
 #include <WiFi.h>
 
 // macros
+// debug
+#define DEBUG 1
 // wifi
 #define WIFI_ID "103"
 #define WIFI_PWD "HelloWorld\\0"
@@ -84,7 +86,7 @@ void setup()
   WiFi.mode(WIFI_AP_STA);
   WiFi.begin(WIFI_ID, WIFI_PWD);
   while(WiFi.status() != WL_CONNECTED) delay(500);
-  debug_print("STA Mode IP: %s", WiFi.localIP());
+  debug_print("STA Mode IP: %s", String(WiFi.localIP()));
 
   // fingerprint init
   Serial2.begin(57600, SERIAL_8N1, 16, 17); // serial for AS608
@@ -111,6 +113,7 @@ void setup()
   if (!SD.exists(CHECKINFILE))
   {
     File file = SD.open(CHECKINFILE, FILE_WRITE);
+    file.println("start check-in");
     file.close();
   }
   if (!SD.exists(BITMAPFILE))
@@ -124,6 +127,28 @@ void setup()
 
 void loop()
 {
+  finger_enroll(finger, BITMAPFILE);
+  //Serial.println("\n选择模式：");
+  //Serial.println("1 - 注册指纹");
+  //Serial.println("2 - 识别指纹");
+  //Serial.println("3 - 清空指纹库");
+
+  //while (!Serial.available());  // 等待用户输入
+  //char mode = Serial.read();
+
+  //switch (mode) {
+    //case '1':
+      //finger_enroll(finger, BITMAPFILE);
+      //break;
+    //case '2':
+      //finger_search(finger, BITMAPFILE);  
+      //break;
+    //case '3':
+      //finger_delete(finger, BITMAPFILE, 0);
+      //break;
+    //default:
+      //Serial.println("无效输入！");
+  //}
   while(1);
 }
 
@@ -133,7 +158,7 @@ void loop()
  * @param Adafruit_Fingerprint finger: specify which finger module choosed
  * @return int: success for 0, fail for -1
  */
-int enroll(Adafruit_Fingerprint &finger, const char *bitmap_file) {
+int finger_enroll(Adafruit_Fingerprint &finger, const char *bitmap_file) {
   char bitmap[128];  // a bitmap for fingerprint
 
   for (int i = 1; i < 3; i++)
@@ -148,10 +173,9 @@ int enroll(Adafruit_Fingerprint &finger, const char *bitmap_file) {
         debug_print("getImage success");
         break;
       case FINGERPRINT_NOFINGER:
-        debug_print(".");
         break;
       default:
-        debug_print("fail to get first image");
+        debug_print("fail to get image");
         return -1;
       }
     }
@@ -163,7 +187,8 @@ int enroll(Adafruit_Fingerprint &finger, const char *bitmap_file) {
       return -1;
     }
     if (i == 1)
-    {
+    { 
+      debug_print("Remove finger and place again");
       ssd1306_print(display, 0, 0, "Remove finger and place again");
       delay(2000);
       p = 0;
@@ -176,13 +201,14 @@ int enroll(Adafruit_Fingerprint &finger, const char *bitmap_file) {
 
   // read bitmap and find which number is available and set that bit to true
   read_bitmap(bitmap_file, bitmap);
+
   int i;
   for(int i = 0; i <= 128; i++) {
     if(bitmap[i] == '0') {
       bitmap[i] = '1';
+      write_bitmap(bitmap_file, bitmap);
       break;
     }
-    write_bitmap(bitmap_file, bitmap);
     if(i == 128) {
       debug_print("fingerprint: no slot for new fingerprint");
       return -1;
@@ -342,6 +368,7 @@ int read_bitmap(const char *file, char *bitmap) {
  */
 int write_bitmap(const char *file, char *bitmap) {
   File f = SD.open(file, FILE_WRITE);
+  f.seek(0);
   f.println(bitmap);
   f.close();
   return 0;
@@ -364,9 +391,11 @@ void ssd1306_print(Adafruit_SSD1306 display, int y, int x, const char *fmt, ...)
   vsnprintf(buf, sizeof(buf), fmt, args);
   va_end(args);
   display.clearDisplay();
-  display.setCursor(y, x);
   display.setTextSize(2);
+  display.setTextColor(WHITE);
+  display.setCursor(x, y);
   display.println(buf);
+  display.display();
 }
 
 /**
