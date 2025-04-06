@@ -29,27 +29,29 @@
 // global var
 // fingerprint
 Adafruit_Fingerprint finger(&Serial2);
-// sdcard
 // ssd1306
 Adafruit_SSD1306 display(SSD1306_WIDTH, SSD1306_HEIGHT, &Wire, -1);
 // bitmap
-char bmap[512];
+char bmap[256];
 
 // declarations
 // functions for debug
-void debug_print(const char *fmt, ...);
-void panic(const char *s);
-void ssd1306_print(Adafruit_SSD1306 display, int y, int x, const char *fmt, ...);
+void debug_print(const char *fmt, ...);   // tested
+void panic(const char *s);    // tested
+void ssd1306_print(Adafruit_SSD1306 display, int y, int x, const char *fmt, ...);   // tested
+// wifi
+String wifi_addr_trans(int ip);
 // bitmaps
-void create_bitmap(const char *file);
-int read_bitmap(const char *file);
-int write_bitmap(const char *file);
+void create_bitmap(const char *file);             // tested
+int read_bitmap(const char *file, char *bitmap);  // tested
+int write_bitmap(const char *file, char *bitmap); // tested
+void print_bitmap(char *bitmap);
 // log
-void write_log();
+void check_in();
 // fingerprints
-int finger_enroll(Adafruit_Fingerprint &finger, const char *bitmap_file);
-int finger_delete(Adafruit_Fingerprint &finger, const char *bitmap_file, int number);
-int finger_search(Adafruit_Fingerprint &finger, const char *bitmap_file);
+int finger_enroll(Adafruit_Fingerprint &finger, const char *bitmap_file);   //tested
+int finger_delete(Adafruit_Fingerprint &finger, const char *bitmap_file, int number);   //!!! something wrong
+int finger_search(Adafruit_Fingerprint &finger, const char *bitmap_file);   // tested
 
 /**
  * @brief init function
@@ -78,7 +80,7 @@ void setup()
   WiFi.mode(WIFI_AP_STA);
   WiFi.begin(WIFI_ID, WIFI_PWD);
   while(WiFi.status() != WL_CONNECTED) delay(500);
-  debug_print("STA Mode IP: %s", String(WiFi.localIP()));
+  debug_print("STA Mode IP: %s", wifi_addr_trans(WiFi.localIP()));
 
   // fingerprint init
   Serial2.begin(57600, SERIAL_8N1, 16, 17); // serial for AS608
@@ -111,16 +113,21 @@ void setup()
   if (!SD.exists(BITMAPFILE))
   {
     create_bitmap(BITMAPFILE);
+    read_bitmap(BITMAPFILE, bmap);
     debug_print("bitmap: %s", bmap);
     finger.emptyDatabase();
   }
 
   ssd1306_print(display, 0, 0, "All hardware init success");
+
+  // tests
 }
 
 void loop()
 {
-  finger_enroll(finger, BITMAPFILE);
+  //finger_enroll(finger, BITMAPFILE);
+  finger_delete(finger, BITMAPFILE, 4);
+  debug_print("%s", bmap);
   while(1);
 }
 
@@ -133,38 +140,35 @@ void loop()
 int finger_enroll(Adafruit_Fingerprint &finger, const char *bitmap_file) {
   int id;
   // set bitmap
-  read_bitmap(bitmap_file);
+  read_bitmap(bitmap_file, bmap);
   debug_print("read bitmap: %s", bmap);
   
-  for(int i = 0; i < 128; i++){
+  for(int i = 0; i < 127; i++){
     if(bmap[i] == '0') {
-      bmap[i] == '1';
-      debug_print("write bitmap: %s", bmap);
-      write_bitmap(bitmap_file);
       id = i+1;
       break;
     }
   }
-  //
+
   int p = -1;
-  Serial.print("Waiting for valid finger to enroll as #"); Serial.println(id);
+  debug_print("Waiting for valid finger to enroll as #%d", id);
   while (p != FINGERPRINT_OK) {
     p = finger.getImage();
     switch (p) {
     case FINGERPRINT_OK:
-      Serial.println("Image taken");
+      debug_print("Image taken");
       break;
     case FINGERPRINT_NOFINGER:
       Serial.print(".");
       break;
     case FINGERPRINT_PACKETRECIEVEERR:
-      Serial.println("Communication error");
+      debug_print("Communication error");
       break;
     case FINGERPRINT_IMAGEFAIL:
-      Serial.println("Imaging error");
+      debug_print("Imaging error");
       break;
     default:
-      Serial.println("Unknown error");
+      debug_print("Unknown error");
       break;
     }
   }
@@ -174,51 +178,51 @@ int finger_enroll(Adafruit_Fingerprint &finger, const char *bitmap_file) {
   p = finger.image2Tz(1);
   switch (p) {
     case FINGERPRINT_OK:
-      Serial.println("Image converted");
+      debug_print("Image converted");
       break;
     case FINGERPRINT_IMAGEMESS:
-      Serial.println("Image too messy");
+      debug_print("Image too messy");
       return p;
     case FINGERPRINT_PACKETRECIEVEERR:
-      Serial.println("Communication error");
+      debug_print("Communication error");
       return p;
     case FINGERPRINT_FEATUREFAIL:
-      Serial.println("Could not find fingerprint features");
+      debug_print("Could not find fingerprint features");
       return p;
     case FINGERPRINT_INVALIDIMAGE:
-      Serial.println("Could not find fingerprint features");
+      debug_print("Could not find fingerprint features");
       return p;
     default:
-      Serial.println("Unknown error");
+      debug_print("Unknown error");
       return p;
   }
 
-  Serial.println("Remove finger");
+  debug_print("Remove finger");
   delay(2000);
   p = 0;
   while (p != FINGERPRINT_NOFINGER) {
     p = finger.getImage();
   }
-  Serial.print("ID "); Serial.println(id);
+  debug_print("ID %d",id);
   p = -1;
-  Serial.println("Place same finger again");
+  debug_print("Place same finger again");
   while (p != FINGERPRINT_OK) {
     p = finger.getImage();
     switch (p) {
     case FINGERPRINT_OK:
-      Serial.println("Image taken");
+      debug_print("Image taken");
       break;
     case FINGERPRINT_NOFINGER:
       Serial.print(".");
       break;
     case FINGERPRINT_PACKETRECIEVEERR:
-      Serial.println("Communication error");
+      debug_print("Communication error");
       break;
     case FINGERPRINT_IMAGEFAIL:
-      Serial.println("Imaging error");
+      debug_print("Imaging error");
       break;
     default:
-      Serial.println("Unknown error");
+      debug_print("Unknown error");
       break;
     }
   }
@@ -228,88 +232,86 @@ int finger_enroll(Adafruit_Fingerprint &finger, const char *bitmap_file) {
   p = finger.image2Tz(2);
   switch (p) {
     case FINGERPRINT_OK:
-      Serial.println("Image converted");
+      debug_print("Image converted");
       break;
     case FINGERPRINT_IMAGEMESS:
-      Serial.println("Image too messy");
+      debug_print("Image too messy");
       return p;
     case FINGERPRINT_PACKETRECIEVEERR:
-      Serial.println("Communication error");
+      debug_print("Communication error");
       return p;
     case FINGERPRINT_FEATUREFAIL:
-      Serial.println("Could not find fingerprint features");
+      debug_print("Could not find fingerprint features");
       return p;
     case FINGERPRINT_INVALIDIMAGE:
-      Serial.println("Could not find fingerprint features");
+      debug_print("Could not find fingerprint features");
       return p;
     default:
-      Serial.println("Unknown error");
+      debug_print("Unknown error");
       return p;
   }
 
   // OK converted!
-  Serial.print("Creating model for #");  Serial.println(id);
+  debug_print("Creating model for #%d",id);
 
   p = finger.createModel();
   if (p == FINGERPRINT_OK) {
-    Serial.println("Prints matched!");
+    debug_print("Prints matched!");
   } else if (p == FINGERPRINT_PACKETRECIEVEERR) {
-    Serial.println("Communication error");
+    debug_print("Communication error");
     return p;
   } else if (p == FINGERPRINT_ENROLLMISMATCH) {
-    Serial.println("Fingerprints did not match");
+    debug_print("Fingerprints did not match");
     return p;
   } else {
-    Serial.println("Unknown error");
+    debug_print("Unknown error");
     return p;
   }
 
-  Serial.print("ID "); Serial.println(id);
+  debug_print("ID: %d", id);
   p = finger.storeModel(id);
   if (p == FINGERPRINT_OK) {
-    Serial.println("Stored!");
+    debug_print("Stored!");
   } else if (p == FINGERPRINT_PACKETRECIEVEERR) {
-    Serial.println("Communication error");
+    debug_print("Communication error");
     return p;
   } else if (p == FINGERPRINT_BADLOCATION) {
-    Serial.println("Could not store in that location");
+    debug_print("Could not store in that location");
     return p;
   } else if (p == FINGERPRINT_FLASHERR) {
-    Serial.println("Error writing to flash");
+    debug_print("Error writing to flash");
     return p;
   } else {
-    Serial.println("Unknown error");
+    debug_print("Unknown error");
     return p;
   }
 
+  bmap[id - 1] = '1';
+  debug_print("%s", bmap);
+  write_bitmap(bitmap_file, bmap);
   return true;
 }
 
 /**
  * @brief 
  * 
- * @param finger 
- * @param bitmap_file 
- * @param number 
+ * @param finger: finger module class 
+ * @param bitmap_file: the location of the bitmap file 
+ * @param number: the number to delete 
  * @return int 
  */
-int finger_delete(Adafruit_Fingerprint &finger, const char *bitmap_file, int number)
+int finger_delete(Adafruit_Fingerprint &finger, const char *bitmap_file, int id)
 {
-  File f = SD.open(bitmap_file, FILE_WRITE);
-  read_bitmap(bitmap_file); 
-  if(bmap[number] == '0') {
-    debug_print("finger_delete: finger is not registered");
+  debug_print("put your finger on");
+  int check_id = finger_search(finger, BITMAPFILE);
+  if(check_id != id) {
+    debug_print("finger_delete: finger does not match");
     return -1;
-  } else {
-    // check if the finger mapped
-    debug_print("please put your finger on ther sensor");
-    ssd1306_print(display, 0, 0, "put your finger on sensor");
-    int p = finger.getImage();
-    if(number == finger_search(finger, bitmap_file)) {
-      finger.deleteModel(number);
-    }
   }
-  f.close();
+  finger.deleteModel(id);
+  read_bitmap(bitmap_file, bmap);
+  bmap[id-1] = '0';
+  write_bitmap(bitmap_file, bmap);
   return 0;
 }
 
@@ -322,29 +324,32 @@ int finger_delete(Adafruit_Fingerprint &finger, const char *bitmap_file, int num
  * @return int 
  */
 int finger_search(Adafruit_Fingerprint &finger, const char *bitmap_file) {
-  File f = SD.open(bitmap_file, FILE_READ);
 
   // if finger can be searched, return number
-  int p = finger.getImage();
-  if (p != FINGERPRINT_OK) {
-    if (p == FINGERPRINT_NOFINGER) {
-      Serial.println("未检测到手指！");
-    } else {
-      Serial.println("图像获取失败，错误代码: 0x" + String(p, HEX));
-    }
-    return 128;
+  int p = -1;
+  while((p = finger.getImage()) != FINGERPRINT_OK) {
+    // will add something later
   }
 
   p = finger.image2Tz();
   if (p != FINGERPRINT_OK) {
-    Serial.println("特征生成失败！");
-    return 128;
+    Serial.println("finger_search: image2Tz failed");
+    return -1;
   }
 
-  f.close(); 
-  if(finger.confidence > 50) return finger.fingerID;
-  // else return 0;
-  return 128;
+  p = finger.fingerFastSearch();
+  if (p != FINGERPRINT_OK) {
+    debug_print("finger_search: fingerFastSearch failed");
+    return -1;
+  }
+  
+  int ret = finger.fingerID;
+  read_bitmap(bitmap_file, bmap);
+  if(bmap[ret-1] != '1') {
+    debug_print("finger_search: bitmap not set");
+    return -1;
+  }
+  return ret;
 }
 
 /**
@@ -353,7 +358,7 @@ int finger_search(Adafruit_Fingerprint &finger, const char *bitmap_file) {
  * @param number
  * @param file 
  */
-void write_log(int number, const char *file) {
+void check_in(int number, const char *file) {
   File f = SD.open(file, FILE_WRITE);
   String message = "Time:" + String(millis()) + ", Number" + String(number); 
   f.println(message);
@@ -367,11 +372,9 @@ void write_log(int number, const char *file) {
  */
 void create_bitmap(const char *file) {
   File f = SD.open(file, FILE_WRITE);
-  for(int i = 0; i < 128; i++){
-    bmap[i] = '0';
+  for(int i = 0; i < 128; i++) {
+    f.write('0');
   }
-  bmap[128] = '\0';
-  f.println(bmap);
   f.close();
 }
 
@@ -382,9 +385,9 @@ void create_bitmap(const char *file) {
  * @param char* bitmap 
  * @return int 
  */
-int read_bitmap(const char *file) {
+int read_bitmap(const char *file, char *bitmap) {
   File f = SD.open(file, FILE_READ);
-  size_t byte_read = f.readBytes(bmap, 129);
+  size_t byte_read = f.readBytes(bitmap, 128);
   bmap[128]= '\0';
   f.close();
   return 0;
@@ -397,13 +400,25 @@ int read_bitmap(const char *file) {
  * @param char* bitmap 
  * @return int 
  */
-int write_bitmap(const char *file) {
+int write_bitmap(const char *file, char *bitmap) {
 
   File f = SD.open(file, FILE_WRITE);
-  f.seek(0);
-  f.println(bmap);
+  for(int i = 0; i < 128; i++) {
+    f.write(bitmap[i]);
+  }
   f.close();
   return 0;
+}
+
+String wifi_addr_trans(int ip) {
+  int seg;
+  String ret;
+  for(int i = 0; i < 4; i++) {
+    seg = ip % 256;
+    ret += String(seg);
+    ip /= 4;
+  }
+  return ret;
 }
 
 /**
