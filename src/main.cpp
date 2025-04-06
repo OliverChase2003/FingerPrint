@@ -32,16 +32,8 @@ Adafruit_Fingerprint finger(&Serial2);
 // sdcard
 // ssd1306
 Adafruit_SSD1306 display(SSD1306_WIDTH, SSD1306_HEIGHT, &Wire, -1);
-// keypad
-// char keypad[KEYPAD_ROW][KEYPAD_COL] = {
-//  {'7', '8', '9', ''},
-//  {'4', '5', '6', ''},
-//  {'1', '2', '3', ''},
-//  {'', '0', '', ''},
-//};
-
-// program's vars
-int num = 0;
+// bitmap
+char bmap[512];
 
 // declarations
 // functions for debug
@@ -50,8 +42,8 @@ void panic(const char *s);
 void ssd1306_print(Adafruit_SSD1306 display, int y, int x, const char *fmt, ...);
 // bitmaps
 void create_bitmap(const char *file);
-int read_bitmap(const char *file, char *bitmap);
-int write_bitmap(const char *file, char *bitmap);
+int read_bitmap(const char *file);
+int write_bitmap(const char *file);
 // log
 void write_log();
 // fingerprints
@@ -119,6 +111,7 @@ void setup()
   if (!SD.exists(BITMAPFILE))
   {
     create_bitmap(BITMAPFILE);
+    debug_print("bitmap: %s", bmap);
     finger.emptyDatabase();
   }
 
@@ -128,27 +121,6 @@ void setup()
 void loop()
 {
   finger_enroll(finger, BITMAPFILE);
-  //Serial.println("\n选择模式：");
-  //Serial.println("1 - 注册指纹");
-  //Serial.println("2 - 识别指纹");
-  //Serial.println("3 - 清空指纹库");
-
-  //while (!Serial.available());  // 等待用户输入
-  //char mode = Serial.read();
-
-  //switch (mode) {
-    //case '1':
-      //finger_enroll(finger, BITMAPFILE);
-      //break;
-    //case '2':
-      //finger_search(finger, BITMAPFILE);  
-      //break;
-    //case '3':
-      //finger_delete(finger, BITMAPFILE, 0);
-      //break;
-    //default:
-      //Serial.println("无效输入！");
-  //}
   while(1);
 }
 
@@ -159,65 +131,125 @@ void loop()
  * @return int: success for 0, fail for -1
  */
 int finger_enroll(Adafruit_Fingerprint &finger, const char *bitmap_file) {
-  char bitmap[128];  // a bitmap for fingerprint
-
-  for (int i = 1; i < 3; i++)
-  {
-    int p = -1;
-    while (p != FINGERPRINT_OK)
-    {
-      p = finger.getImage();
-      switch (p)
-      {
-      case FINGERPRINT_OK:
-        debug_print("getImage success");
-        break;
-      case FINGERPRINT_NOFINGER:
-        break;
-      default:
-        debug_print("fail to get image");
-        return -1;
-      }
-    }
-    p = -1; // reset p
-    // get the feature of the image 1
-    if ((p = finger.image2Tz(i)) != FINGERPRINT_OK)
-    {
-      debug_print("first image2Tz fail");
-      return -1;
-    }
-    if (i == 1)
-    { 
-      debug_print("Remove finger and place again");
-      ssd1306_print(display, 0, 0, "Remove finger and place again");
-      delay(2000);
-      p = 0;
-      while (p != FINGERPRINT_NOFINGER)
-      {
-        p = finger.getImage();
-      }
-    }
-  }
-
-  // read bitmap and find which number is available and set that bit to true
-  read_bitmap(bitmap_file, bitmap);
-
-  int i;
-  for(int i = 0; i <= 128; i++) {
-    if(bitmap[i] == '0') {
-      bitmap[i] = '1';
-      write_bitmap(bitmap_file, bitmap);
+  int id;
+  // set bitmap
+  read_bitmap(bitmap_file);
+  debug_print("read bitmap: %s", bmap);
+  
+  for(int i = 0; i < 128; i++){
+    if(bmap[i] == '0') {
+      bmap[i] == '1';
+      debug_print("write bitmap: %s", bmap);
+      write_bitmap(bitmap_file);
+      id = i+1;
       break;
     }
-    if(i == 128) {
-      debug_print("fingerprint: no slot for new fingerprint");
-      return -1;
+  }
+  //
+  int p = -1;
+  Serial.print("Waiting for valid finger to enroll as #"); Serial.println(id);
+  while (p != FINGERPRINT_OK) {
+    p = finger.getImage();
+    switch (p) {
+    case FINGERPRINT_OK:
+      Serial.println("Image taken");
+      break;
+    case FINGERPRINT_NOFINGER:
+      Serial.print(".");
+      break;
+    case FINGERPRINT_PACKETRECIEVEERR:
+      Serial.println("Communication error");
+      break;
+    case FINGERPRINT_IMAGEFAIL:
+      Serial.println("Imaging error");
+      break;
+    default:
+      Serial.println("Unknown error");
+      break;
     }
   }
 
-  // store the fingerprint
-  ssd1306_print(display, 0, 0, "Creating model for #%d", i);
-  int p;
+  // OK success!
+
+  p = finger.image2Tz(1);
+  switch (p) {
+    case FINGERPRINT_OK:
+      Serial.println("Image converted");
+      break;
+    case FINGERPRINT_IMAGEMESS:
+      Serial.println("Image too messy");
+      return p;
+    case FINGERPRINT_PACKETRECIEVEERR:
+      Serial.println("Communication error");
+      return p;
+    case FINGERPRINT_FEATUREFAIL:
+      Serial.println("Could not find fingerprint features");
+      return p;
+    case FINGERPRINT_INVALIDIMAGE:
+      Serial.println("Could not find fingerprint features");
+      return p;
+    default:
+      Serial.println("Unknown error");
+      return p;
+  }
+
+  Serial.println("Remove finger");
+  delay(2000);
+  p = 0;
+  while (p != FINGERPRINT_NOFINGER) {
+    p = finger.getImage();
+  }
+  Serial.print("ID "); Serial.println(id);
+  p = -1;
+  Serial.println("Place same finger again");
+  while (p != FINGERPRINT_OK) {
+    p = finger.getImage();
+    switch (p) {
+    case FINGERPRINT_OK:
+      Serial.println("Image taken");
+      break;
+    case FINGERPRINT_NOFINGER:
+      Serial.print(".");
+      break;
+    case FINGERPRINT_PACKETRECIEVEERR:
+      Serial.println("Communication error");
+      break;
+    case FINGERPRINT_IMAGEFAIL:
+      Serial.println("Imaging error");
+      break;
+    default:
+      Serial.println("Unknown error");
+      break;
+    }
+  }
+
+  // OK success!
+
+  p = finger.image2Tz(2);
+  switch (p) {
+    case FINGERPRINT_OK:
+      Serial.println("Image converted");
+      break;
+    case FINGERPRINT_IMAGEMESS:
+      Serial.println("Image too messy");
+      return p;
+    case FINGERPRINT_PACKETRECIEVEERR:
+      Serial.println("Communication error");
+      return p;
+    case FINGERPRINT_FEATUREFAIL:
+      Serial.println("Could not find fingerprint features");
+      return p;
+    case FINGERPRINT_INVALIDIMAGE:
+      Serial.println("Could not find fingerprint features");
+      return p;
+    default:
+      Serial.println("Unknown error");
+      return p;
+  }
+
+  // OK converted!
+  Serial.print("Creating model for #");  Serial.println(id);
+
   p = finger.createModel();
   if (p == FINGERPRINT_OK) {
     Serial.println("Prints matched!");
@@ -231,8 +263,9 @@ int finger_enroll(Adafruit_Fingerprint &finger, const char *bitmap_file) {
     Serial.println("Unknown error");
     return p;
   }
-  
-  p = finger.storeModel(i);
+
+  Serial.print("ID "); Serial.println(id);
+  p = finger.storeModel(id);
   if (p == FINGERPRINT_OK) {
     Serial.println("Stored!");
   } else if (p == FINGERPRINT_PACKETRECIEVEERR) {
@@ -249,7 +282,7 @@ int finger_enroll(Adafruit_Fingerprint &finger, const char *bitmap_file) {
     return p;
   }
 
-  return 0;
+  return true;
 }
 
 /**
@@ -263,9 +296,8 @@ int finger_enroll(Adafruit_Fingerprint &finger, const char *bitmap_file) {
 int finger_delete(Adafruit_Fingerprint &finger, const char *bitmap_file, int number)
 {
   File f = SD.open(bitmap_file, FILE_WRITE);
-  char bitmap[129];
-  read_bitmap(bitmap_file, bitmap); 
-  if(bitmap[number] == '0') {
+  read_bitmap(bitmap_file); 
+  if(bmap[number] == '0') {
     debug_print("finger_delete: finger is not registered");
     return -1;
   } else {
@@ -335,12 +367,11 @@ void write_log(int number, const char *file) {
  */
 void create_bitmap(const char *file) {
   File f = SD.open(file, FILE_WRITE);
-  char empty_bitmap[129];
   for(int i = 0; i < 128; i++){
-    empty_bitmap[i] = '0';
+    bmap[i] = '0';
   }
-  empty_bitmap[128] = '\0';
-  f.println(empty_bitmap);
+  bmap[128] = '\0';
+  f.println(bmap);
   f.close();
 }
 
@@ -351,10 +382,10 @@ void create_bitmap(const char *file) {
  * @param char* bitmap 
  * @return int 
  */
-int read_bitmap(const char *file, char *bitmap) {
+int read_bitmap(const char *file) {
   File f = SD.open(file, FILE_READ);
-  size_t byte_read = f.readBytes(bitmap, sizeof(bitmap) - 1);
-  bitmap[sizeof(bitmap)] = '\0';
+  size_t byte_read = f.readBytes(bmap, 129);
+  bmap[128]= '\0';
   f.close();
   return 0;
 }
@@ -366,10 +397,11 @@ int read_bitmap(const char *file, char *bitmap) {
  * @param char* bitmap 
  * @return int 
  */
-int write_bitmap(const char *file, char *bitmap) {
+int write_bitmap(const char *file) {
+
   File f = SD.open(file, FILE_WRITE);
   f.seek(0);
-  f.println(bitmap);
+  f.println(bmap);
   f.close();
   return 0;
 }
