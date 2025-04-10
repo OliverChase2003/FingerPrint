@@ -1,14 +1,17 @@
+// arduino
 #include <Arduino.h>
+#include <Wire.h>
 #include <SPI.h>
 #include <FS.h>
 #include <SD.h>
+#include <WiFi.h>
+//
 #include <Adafruit_GFX.h>
 #include <Adafruit_Fingerprint.h>
-#include <Adafruit_SSD1306.h>
-#include <Keypad.h>
+#include <U8g2lib.h>
+// std
 #include <string.h>
 #include <stdlib.h>
-#include <WiFi.h>
 
 // macros
 // debug
@@ -30,7 +33,8 @@
 // fingerprint
 Adafruit_Fingerprint finger(&Serial2);
 // ssd1306
-Adafruit_SSD1306 display(SSD1306_WIDTH, SSD1306_HEIGHT, &Wire, -1);
+//Adafruit_SSD1306 display(SSD1306_WIDTH, SSD1306_HEIGHT, &Wire, -1);
+U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, /*reset=*/ U8X8_PIN_NONE);
 // bitmap
 char bmap[256];
 
@@ -38,7 +42,7 @@ char bmap[256];
 // functions for debug
 void debug_print(const char *fmt, ...);   // tested
 void panic(const char *s);    // tested
-void ssd1306_print(Adafruit_SSD1306 display, int y, int x, const char *fmt, ...);   // tested
+void ssd1306_print(int x, int y, const char *buf);   // tested
 // wifi
 String wifi_addr_trans(int ip);
 // bitmaps
@@ -50,7 +54,7 @@ void print_bitmap(char *bitmap);
 void check_in();
 // fingerprints
 int finger_enroll(Adafruit_Fingerprint &finger, const char *bitmap_file);   //tested
-int finger_delete(Adafruit_Fingerprint &finger, const char *bitmap_file, int number);   //!!! something wrong
+int finger_delete(Adafruit_Fingerprint &finger, const char *bitmap_file, int number);   // tested
 int finger_search(Adafruit_Fingerprint &finger, const char *bitmap_file);   // tested
 
 /**
@@ -67,9 +71,9 @@ void setup()
   }
 
   // ssd1306 screen init
-  if (display.begin(SSD1306_SWITCHCAPVCC, 0x3C))
+  if (u8g2.begin())
   {
-    debug_print("ssd1306 init success!");
+    debug_print("ssd1306 init successed");
   }
   else
   {
@@ -118,15 +122,16 @@ void setup()
     finger.emptyDatabase();
   }
 
-  ssd1306_print(display, 0, 0, "All hardware init success");
-
+  ssd1306_print(0, 0, "All hardware init success");
   // tests
 }
 
 void loop()
 {
-  //finger_enroll(finger, BITMAPFILE);
-  finger_delete(finger, BITMAPFILE, 4);
+  finger_enroll(finger, BITMAPFILE);
+  debug_print("wait");
+  delay(2000);
+  finger_delete(finger, BITMAPFILE, 1);
   debug_print("%s", bmap);
   while(1);
 }
@@ -302,16 +307,23 @@ int finger_enroll(Adafruit_Fingerprint &finger, const char *bitmap_file) {
  */
 int finger_delete(Adafruit_Fingerprint &finger, const char *bitmap_file, int id)
 {
-  debug_print("put your finger on");
-  int check_id = finger_search(finger, BITMAPFILE);
+  //debug_print("put your finger on");
+  ssd1306_print(0, 0, "put your finger on");
+  int check_id = finger_search(finger, bitmap_file);
   if(check_id != id) {
     debug_print("finger_delete: finger does not match");
+    ssd1306_print(0, 0, "finger does not match");
     return -1;
   }
   finger.deleteModel(id);
   read_bitmap(bitmap_file, bmap);
   bmap[id-1] = '0';
   write_bitmap(bitmap_file, bmap);
+  //ssd1306_print(display, 0, 0, "finger deleted");
+  #ifdef DEBUG
+  debug_print("bitmap after deleted:");
+  debug_print("%s", bmap);
+  #endif
   return 0;
 }
 
@@ -430,21 +442,30 @@ String wifi_addr_trans(int ip) {
  * @param char* fmt
  * @param ...
  */
-void ssd1306_print(Adafruit_SSD1306 display, int y, int x, const char *fmt, ...)
-{
-  char buf[64];
-  va_list args;
-  va_start(args, fmt);
-  vsnprintf(buf, sizeof(buf), fmt, args);
-  va_end(args);
-  display.clearDisplay();
-  display.setTextSize(2);
-  display.setTextColor(WHITE);
-  display.setCursor(x, y);
-  display.println(buf);
-  display.display();
-}
+//void ssd1306_print(Adafruit_SSD1306 display, int y, int x, const char *buf)
+//{
+//  display.clearDisplay();
+//  debug_print("clear");
+//  display.setTextSize(2);
+//  debug_print("textsz");
+//  display.setTextColor(WHITE);
+//  debug_print("color");
+//  display.setCursor(x, y);
+//  debug_print("cursor");
+//  display.println(buf);
+//  debug_print("buf");
+//  display.display();
+//  //display.startscrollright(0x00, 0x00);
+//}
 
+void ssd1306_print(int x, int y, const char* buf) {
+  u8g2.clearBuffer();
+  debug_print("clear");
+  u8g2.setFont(u8g2_font_7x13_tr);
+  u8g2.setCursor(x, y + 12);  // 设置光标位置(x,y)
+  u8g2.print(buf);
+  u8g2.sendBuffer();
+}
 /**
  * @brief print a string to default Serial like "printf()" to debug program
  * 
@@ -453,7 +474,7 @@ void ssd1306_print(Adafruit_SSD1306 display, int y, int x, const char *fmt, ...)
  */
 void debug_print(const char *fmt, ...)
 {
-  char buf[64];
+  char buf[128];
   va_list args;
   va_start(args, fmt);
   vsnprintf(buf, sizeof(buf), fmt, args);
