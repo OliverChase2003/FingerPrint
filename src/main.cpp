@@ -5,13 +5,17 @@
 #include <FS.h>
 #include <SD.h>
 #include <WiFi.h>
-//
-#include <Adafruit_GFX.h>
+#include <HTTPClient.h>
+#include <time.h>
+//#include <Adafruit_GFX.h>
 #include <Adafruit_Fingerprint.h>
 #include <U8g2lib.h>
 // std
 #include <string.h>
 #include <stdlib.h>
+#include <string>
+#include <vector>
+#include <sstream>
 
 // macros
 // debug
@@ -19,6 +23,8 @@
 // wifi
 #define WIFI_ID "103"
 #define WIFI_PWD "HelloWorld\\0"
+const char* ntpServer = "cn.pool.ntp.org";
+const long utcOffsetInSeconds = 28800;
 // ssd1306 defs
 #define SSD1306_WIDTH 128 // ssd1306 oled pixel width
 #define SSD1306_HEIGHT 64 // ssd1306 oled pixel height
@@ -33,7 +39,6 @@
 // fingerprint
 Adafruit_Fingerprint finger(&Serial2);
 // ssd1306
-//Adafruit_SSD1306 display(SSD1306_WIDTH, SSD1306_HEIGHT, &Wire, -1);
 U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, /*reset=*/ U8X8_PIN_NONE);
 // bitmap
 char bmap[256];
@@ -42,20 +47,41 @@ char bmap[256];
 // functions for debug
 void debug_print(const char *fmt, ...);   // tested
 void panic(const char *s);    // tested
-void ssd1306_print(int x, int y, const char *buf);   // tested
+void ssd1306_print(int x, int y, const char *fmt, ...);   // tested
 // wifi
 String wifi_addr_trans(int ip);
+void printLocalTime();
+int time2str(char *time_str);
 // bitmaps
 void create_bitmap(const char *file);             // tested
 int read_bitmap(const char *file, char *bitmap);  // tested
 int write_bitmap(const char *file, char *bitmap); // tested
 void print_bitmap(char *bitmap);
 // log
-void check_in();
+void check_in(const char *file, char *bitmap);
 // fingerprints
 int finger_enroll(Adafruit_Fingerprint &finger, const char *bitmap_file);   //tested
 int finger_delete(Adafruit_Fingerprint &finger, const char *bitmap_file, int number);   // tested
 int finger_search(Adafruit_Fingerprint &finger, const char *bitmap_file);   // tested
+
+void printLocalTime() {
+  struct tm timeinfo;
+  if (!getLocalTime(&timeinfo)) {
+    debug_print("fetch time failed");
+    return;
+  }
+  Serial.println(&timeinfo, "time: %Y-%m-%d %H:%M:%S");
+}
+
+int time2str(char *time_str) {
+  struct tm timeinfo;
+  if (!getLocalTime(&timeinfo)) {
+    debug_print("fetch time failed");
+    return -1;
+  }
+  sprintf(time_str, "%Y-%m-%d %H:%M:%S", &timeinfo);
+  return 0;
+}
 
 /**
  * @brief init function
@@ -122,8 +148,11 @@ void setup()
     finger.emptyDatabase();
   }
 
+  debug_print("All hardware init success");
   ssd1306_print(0, 0, "All hardware init success");
-  // tests
+
+  configTime(utcOffsetInSeconds, 0, ntpServer);
+  printLocalTime();
 }
 
 void loop()
@@ -336,11 +365,29 @@ int finger_delete(Adafruit_Fingerprint &finger, const char *bitmap_file, int id)
  * @return int 
  */
 int finger_search(Adafruit_Fingerprint &finger, const char *bitmap_file) {
-
   // if finger can be searched, return number
+  // else return -1
   int p = -1;
   while((p = finger.getImage()) != FINGERPRINT_OK) {
     // will add something later
+    debug_print("please put you finger on the sensor");
+    switch (p) {
+      case FINGERPRINT_OK:
+        debug_print("Image taken");
+        break;
+      case FINGERPRINT_NOFINGER:
+        debug_print(".");
+        break;
+      case FINGERPRINT_PACKETRECIEVEERR:
+        debug_print("Communication error");
+        break;
+      case FINGERPRINT_IMAGEFAIL:
+        debug_print("Imaging error");
+        break;
+      default:
+        debug_print("Unknown error");
+        break;
+    }
   }
 
   p = finger.image2Tz();
@@ -370,10 +417,22 @@ int finger_search(Adafruit_Fingerprint &finger, const char *bitmap_file) {
  * @param number
  * @param file 
  */
-void check_in(int number, const char *file) {
+void check_in(Adafruit_Fingerprint finger, const char *file) {
   File f = SD.open(file, FILE_WRITE);
-  String message = "Time:" + String(millis()) + ", Number" + String(number); 
-  f.println(message);
+  while(1) {
+    int ID = -1;
+    if((ID = finger_search(finger, BITMAPFILE)) < 0) {
+      debug_print("check-in: finger not right");
+      continue;
+    }
+    char timestr[15];
+    if (time2str(timestr) < 0) {
+      debug_print("check-in: unable to fetch the time");
+      continue;
+    }
+    String checkinfo;
+    checkinfo = String(ID) + timestr;
+  }
   f.close();
 }
 
@@ -436,36 +495,66 @@ String wifi_addr_trans(int ip) {
 /**
  * @brief display string on ssd1306
  *
- * @param Adafruit_Fingerprint display
- * @param int y
  * @param int x
+ * @param int y
  * @param char* fmt
  * @param ...
  */
-//void ssd1306_print(Adafruit_SSD1306 display, int y, int x, const char *buf)
-//{
-//  display.clearDisplay();
-//  debug_print("clear");
-//  display.setTextSize(2);
-//  debug_print("textsz");
-//  display.setTextColor(WHITE);
-//  debug_print("color");
-//  display.setCursor(x, y);
-//  debug_print("cursor");
-//  display.println(buf);
-//  debug_print("buf");
-//  display.display();
-//  //display.startscrollright(0x00, 0x00);
-//}
-
-void ssd1306_print(int x, int y, const char* buf) {
+void ssd1306_print(int x, int y, const char* fmt, ...) {
+  char buf[19];
+  va_list args;
+  va_start(args, fmt);
+  vsnprintf(buf, sizeof(buf), fmt, args);
+  va_end(args);
   u8g2.clearBuffer();
-  debug_print("clear");
-  u8g2.setFont(u8g2_font_7x13_tr);
-  u8g2.setCursor(x, y + 12);  // 设置光标位置(x,y)
-  u8g2.print(buf);
+  u8g2.setFont(u8g2_font_9x15_tr);
+  u8g2.setCursor(x, y + 14);  // 设置光标位置(x,y)
+  u8g2.println(buf);
   u8g2.sendBuffer();
 }
+
+/**
+ * @brief print str in the middle of display  
+ * 
+ * @param x 
+ * @param y 
+ * @param fmt 
+ * @param ... 
+ */
+//void ssd1306_print(int x, int y, const char *fmt, ...) {
+//  _ssd1306_print(x, y, fmt, ...);
+//  // test part
+//  //return ;
+//  // push fmt to buffer
+//  char buf[64]; 
+//  va_list args;
+//  va_start(args, fmt);
+//  vsnprintf(buf, sizeof(buf), fmt, args);
+//  va_end(args);
+//  // split to words
+//  std::string bufferStr(buf);
+//  std::istringstream iss(buf); 
+//  std::vector<std::string> words;
+//  std::string word;
+//  while(iss >> word) {
+//    words.push_back(word);
+//  }
+//  // cal cols and lines
+//  int cols = (SSD1306_WIDTH - 2 * x) / 9;
+//  int lines = (SSD1306_HEIGHT - 2 * y) / 15;
+//  // push words to
+//  int words_idx = 0;
+//  std::vector<std::string> screen_buffer[lines];
+//  while(1) {
+//    screen_buffer[0] += " ";
+//  }
+//  // clear screen
+//  u8g2.clearBuffer();
+//  u8g2.setFont(u8g2_font_9x15_tr);
+//  //
+//
+//}
+
 /**
  * @brief print a string to default Serial like "printf()" to debug program
  * 
